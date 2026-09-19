@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SMART-SCAN EW — Walkthrough</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b12;
+    --panel:#0d1420;
+    --panel2:#111b2b;
+    --edge:#1e2c3f;
+    --ink:#eef3fa;
+    --ink-dim:#9fb0c6;
+    --ink-faint:#5f7188;
+    --amber:#ff8a3d;
+    --amber-dim:#c9631f;
+    --cyan:#4fd3ff;
+    --green:#3ee08a;
+    --red:#ff5d5d;
+    --violet:#8a7dff;
+    font-family:'Inter',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{
+    width:100%; height:100%; background:var(--bg); color:var(--ink);
+    overflow:hidden; font-family:'Inter',system-ui,sans-serif;
+  }
+  #stage{
+    position:relative; width:100vw; height:100vh; min-height:560px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  canvas#bgnet{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .vignette{
+    position:absolute; inset:0; pointer-events:none;
+    background:
+      radial-gradient(ellipse at 50% 45%, rgba(7,11,18,0) 35%, rgba(7,11,18,0.55) 78%, rgba(7,11,18,0.92) 100%);
+    z-index:5;
+  }
+  .scanlines{
+    position:absolute; inset:0; pointer-events:none; z-index:6; opacity:0.05;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,0.6) 0px, rgba(255,255,255,0.6) 1px, transparent 1px, transparent 3px);
+  }
+  .hud-corner{ position:absolute; width:34px; height:34px; border-color:var(--amber-dim); opacity:0.55; z-index:7; }
+  .hud-corner.tl{ top:22px; left:22px; border-top:2px solid; border-left:2px solid; }
+  .hud-corner.tr{ top:22px; right:22px; border-top:2px solid; border-right:2px solid; }
+  .hud-corner.bl{ bottom:22px; left:22px; border-bottom:2px solid; border-left:2px solid; }
+  .hud-corner.br{ bottom:22px; right:22px; border-bottom:2px solid; border-right:2px solid; }
+
+  .telemetry{
+    position:absolute; top:26px; z-index:7; font-family:'JetBrains Mono',monospace;
+    font-size:11px; letter-spacing:0.03em; color:var(--ink-faint); line-height:1.6;
+  }
+  .telemetry.left{ left:64px; text-align:left; }
+  .telemetry.right{ right:64px; text-align:right; }
+  .telemetry b{ color:var(--amber); font-weight:600; }
+  .telemetry .dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:6px; box-shadow:0 0 6px var(--green); }
+
+  .badge{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.12em;
+    color:var(--amber); border:1px solid rgba(255,138,61,0.4); background:rgba(255,138,61,0.06);
+    padding:6px 14px; border-radius:2px; text-transform:uppercase;
+  }
+  .badge .sq{ width:6px; height:6px; background:var(--amber); }
+
+  #scenes{ position:relative; width:min(1180px, 90vw); height:min(700px, 82vh); z-index:8; }
+  .scene{
+    position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
+    opacity:0; transform:translateY(18px) scale(0.985); pointer-events:none;
+    transition: opacity 0.65s cubic-bezier(.22,.61,.36,1), transform 0.65s cubic-bezier(.22,.61,.36,1);
+  }
+  .scene.active{ opacity:1; transform:translateY(0) scale(1); pointer-events:auto; }
+  .scene.leaving{ opacity:0; transform:translateY(-14px) scale(1.01); }
+
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; letter-spacing:0.22em;
+    color:var(--amber); text-transform:uppercase; margin-bottom:14px; display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow .num{ color:var(--ink-faint); }
+  .eyebrow::after{ content:""; flex:1; height:1px; background:linear-gradient(to right, rgba(255,138,61,0.5), transparent); }
+
+  h1.scene-title{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; color:var(--ink);
+    font-size:clamp(30px, 4vw, 48px); line-height:1.08; letter-spacing:-0.01em; margin-bottom:6px;
+  }
+  .scene-sub{ font-size:16px; color:var(--ink-dim); max-width:760px; line-height:1.55; margin-bottom:26px; }
+
+  .grid{ display:grid; gap:16px; }
+  .card{
+    background:linear-gradient(180deg, var(--panel2), var(--panel));
+    border:1px solid var(--edge); border-radius:10px; padding:18px 20px;
+    position:relative; overflow:hidden;
+  }
+  .card::before{
+    content:""; position:absolute; top:0; left:0; width:100%; height:100%;
+    background:radial-gradient(140px 90px at 15% 0%, rgba(255,138,61,0.07), transparent 70%);
+    pointer-events:none;
+  }
+  .card h3{ font-family:'Space Grotesk',sans-serif; font-size:16px; color:var(--ink); margin-bottom:6px; font-weight:600; }
+  .card p{ font-size:13px; color:var(--ink-dim); line-height:1.55; }
+  .tag{
+    display:inline-block; font-family:'JetBrains Mono',monospace; font-size:10.5px; letter-spacing:0.05em;
+    color:var(--cyan); background:rgba(79,211,255,0.08); border:1px solid rgba(79,211,255,0.28);
+    padding:3px 8px; border-radius:3px; margin-bottom:10px;
+  }
+
+  .stat-num{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(34px,4vw,52px);
+    color:var(--amber); line-height:1; letter-spacing:-0.01em;
+  }
+  .stat-label{ font-size:12.5px; color:var(--ink-dim); margin-top:8px; line-height:1.4; }
+
+  .pill{
+    display:inline-flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace;
+    font-size:11.5px; color:var(--ink-dim); border:1px solid var(--edge); background:var(--panel2);
+    padding:6px 12px; border-radius:999px;
+  }
+
+  /* Progress + controls */
+  #progress-wrap{ position:absolute; top:0; left:0; width:100%; height:3px; z-index:20; display:flex; gap:4px; padding:0 22px; }
+  .progress-seg{ flex:1; height:100%; background:rgba(255,255,255,0.09); position:relative; border-radius:2px; overflow:hidden; top:14px; height:2.5px; }
+  .progress-seg .fill{ position:absolute; left:0; top:0; height:100%; width:0%; background:var(--amber); }
+  .progress-seg.done .fill{ width:100%; }
+
+  #controls{
+    position:absolute; bottom:24px; right:64px; z-index:20; display:flex; align-items:center; gap:14px;
+  }
+  .ctl-btn{
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--edge); background:rgba(13,20,32,0.8);
+    color:var(--ink-dim); display:flex; align-items:center; justify-content:center; cursor:pointer;
+    transition:all .2s; backdrop-filter:blur(4px);
+  }
+  .ctl-btn:hover{ border-color:var(--amber); color:var(--amber); }
+  #dots{ position:absolute; bottom:24px; left:64px; z-index:20; display:flex; gap:8px; }
+  .dot-nav{ width:7px; height:7px; border-radius:50%; background:var(--edge); cursor:pointer; transition:all .25s; }
+  .dot-nav.active{ background:var(--amber); width:20px; border-radius:4px; }
+
+  #scene-idx{
+    position:absolute; bottom:26px; left:50%; transform:translateX(-50%); z-index:20;
+    font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--ink-faint); letter-spacing:0.1em;
+  }
+
+  #hint{
+    position:absolute; top:26px; left:50%; transform:translateX(-50%); z-index:20;
+    font-family:'JetBrains Mono',monospace; font-size:10.5px; color:var(--ink-faint);
+    opacity:0; transition:opacity 0.4s; letter-spacing:0.05em;
+  }
+  #stage:hover #hint{ opacity:0.7; }
+
+  /* glitch title */
+  .glitch-wrap{ position:relative; display:inline-block; }
+  .glitch{ position:relative; display:inline-block; }
+  .glitch::before, .glitch::after{
+    content: attr(data-text); position:absolute; left:0; top:0; width:100%; overflow:hidden;
+    background:transparent;
+  }
+  .glitch::before{ color:var(--cyan); clip-path: inset(0 0 55% 0); transform: translate(-2px,-1px); opacity:0.7; animation: glitchTop 3.4s infinite steps(1); }
+  .glitch::after{ color:var(--red); clip-path: inset(55% 0 0 0); transform: translate(2px,1px); opacity:0.6; animation: glitchBot 3.9s infinite steps(1); }
+  @keyframes glitchTop{ 0%,92%,100%{ transform:translate(-2px,-1px); opacity:0.7;} 93%{ transform:translate(3px,-2px); opacity:0.9;} 95%{ transform:translate(-4px,1px); opacity:0.3;} }
+  @keyframes glitchBot{ 0%,90%,100%{ transform:translate(2px,1px); opacity:0.6;} 91%{ transform:translate(-3px,2px); opacity:0.85;} 96%{ transform:translate(4px,-1px); opacity:0.25;} }
+
+  .typewriter{
+    overflow:hidden; white-space:nowrap; border-right:2px solid var(--amber);
+    animation: type 2.6s steps(46,end) 0.4s 1 normal both, blink 0.85s step-end infinite;
+  }
+  @keyframes type{ from{ width:0; } to{ width:100%; } }
+  @keyframes blink{ 50%{ border-color:transparent; } }
+
+  .fade-in{ opacity:0; animation: fadeInUp 0.7s ease forwards; }
+  @keyframes fadeInUp{ from{ opacity:0; transform:translateY(10px);} to{ opacity:1; transform:translateY(0);} }
+
+  .flow-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .flow-node{
+    font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink); background:var(--panel2);
+    border:1px solid var(--edge); padding:8px 14px; border-radius:6px; white-space:nowrap;
+  }
+  .flow-arrow{ color:var(--amber-dim); font-size:16px; }
+
+  .center-text{ text-align:center; }
+  .mx-auto{ margin-left:auto; margin-right:auto; }
+
+  ::selection{ background:rgba(255,138,61,0.3); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="bgnet"></canvas>
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+
+  <div class="hud-corner tl"></div>
+  <div class="hud-corner tr"></div>
+  <div class="hud-corner bl"></div>
+  <div class="hud-corner br"></div>
+
+  <div class="telemetry left" id="telemetry-left">
+    <div><span class="dot"></span>SYS <b>ONLINE</b></div>
+    <div>MODE&nbsp; <b>ADAPTIVE</b></div>
+    <div>SCEN&nbsp; <b id="tl-scenario">BEHAVIORAL PATTERN</b></div>
+  </div>
+  <div class="telemetry right" id="telemetry-right">
+    <div>FREQ LOCK <b id="tr-freq">312.4</b> MHz</div>
+    <div>CONF&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <b id="tr-conf">78</b>%</div>
+    <div>SIH26055</div>
+  </div>
+
+  <div id="hint">SPACE PAUSE&nbsp;&nbsp;·&nbsp;&nbsp;&larr; &rarr; NAVIGATE&nbsp;&nbsp;·&nbsp;&nbsp;CLICK DOTS TO JUMP</div>
+
+  <div id="scenes"></div>
+
+  <div id="progress-wrap"></div>
+  <div id="dots"></div>
+  <div id="scene-idx"></div>
+  <div id="controls">
+    <div class="ctl-btn" id="btn-prev" title="Previous">&#9664;</div>
+    <div class="ctl-btn" id="btn-play" title="Pause">&#10073;&#10073;</div>
+    <div class="ctl-btn" id="btn-next" title="Next">&#9654;</div>
+  </div>
+</div>
+
+<script>
+/* ============================= BACKGROUND: RF NETWORK CANVAS ============================= */
+const canvas = document.getElementById('bgnet');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = canvas.clientWidth = window.innerWidth;
+  H = canvas.clientHeight = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const NODE_COUNT = 46;
+let nodes = [];
+function initNodes(){
+  nodes = [];
+  for(let i=0;i<NODE_COUNT;i++){
+    nodes.push({
+      x: Math.random()*W, y: Math.random()*H,
+      vx: (Math.random()-0.5)*0.18, vy:(Math.random()-0.5)*0.18,
+      r: Math.random()*1.6+0.8,
+      pulse: Math.random()*Math.PI*2,
+      active: Math.random() < 0.12
+    });
+  }
+}
+initNodes();
+window.addEventListener('resize', ()=>{ initNodes(); });
+
+/* ---- Radar / PPI sweep ---- */
+let sweepAngle = 0;
+const radarBlips = [];
+function initRadar(){
+  radarBlips.length = 0;
+  const count = 14;
+  for(let i=0;i<count;i++){
+    const a = Math.random()*Math.PI*2;
+    const rr = 0.18 + Math.random()*0.78; // fraction of radius
+    radarBlips.push({ a, rr, glow: 0, size: 1.6+Math.random()*1.6 });
+  }
+}
+initRadar();
+window.addEventListener('resize', initRadar);
+
+function drawRadar(now){
+  const cx = W*0.74, cy = H*0.46;
+  const radius = Math.min(W,H)*0.52;
+
+  ctx.save();
+  ctx.translate(cx,cy);
+
+  // range rings
+  ctx.strokeStyle = 'rgba(79,211,255,0.09)';
+  ctx.lineWidth = 1;
+  for(let i=1;i<=4;i++){
+    ctx.beginPath();
+    ctx.arc(0,0, radius*(i/4), 0, Math.PI*2);
+    ctx.stroke();
+  }
+  // crosshair
+  ctx.strokeStyle = 'rgba(79,211,255,0.06)';
+  ctx.beginPath(); ctx.moveTo(-radius,0); ctx.lineTo(radius,0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,-radius); ctx.lineTo(0,radius); ctx.stroke();
+
+  // faint degree ticks
+  ctx.strokeStyle = 'rgba(79,211,255,0.05)';
+  for(let d=0; d<360; d+=30){
+    const rad = d*Math.PI/180;
+    const x1 = Math.cos(rad)*radius*0.97, y1 = Math.sin(rad)*radius*0.97;
+    const x2 = Math.cos(rad)*radius, y2 = Math.sin(rad)*radius;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+
+  // sweep trail (wedge gradient)
+  sweepAngle += 0.006;
+  const trailSpan = 0.9; // radians of trailing fade
+  const grad = ctx.createConicGradient ? ctx.createConicGradient(sweepAngle - trailSpan, 0, 0) : null;
+  if(grad){
+    grad.addColorStop(0, 'rgba(255,138,61,0)');
+    grad.addColorStop(0.85, 'rgba(255,138,61,0.02)');
+    grad.addColorStop(1, 'rgba(255,138,61,0.16)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.arc(0,0,radius, sweepAngle-trailSpan, sweepAngle);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    // fallback: simple wedge
+    ctx.fillStyle = 'rgba(255,138,61,0.08)';
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.arc(0,0,radius, sweepAngle-0.35, sweepAngle);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // leading sweep line
+  ctx.strokeStyle = 'rgba(255,178,110,0.55)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(0,0);
+  ctx.lineTo(Math.cos(sweepAngle)*radius, Math.sin(sweepAngle)*radius);
+  ctx.stroke();
+
+  // blips: flash when swept, then decay
+  for(const b of radarBlips){
+    let diff = (sweepAngle - b.a) % (Math.PI*2);
+    if(diff < 0) diff += Math.PI*2;
+    if(diff < 0.12) b.glow = 1;
+    else b.glow = Math.max(0, b.glow - 0.012);
+    if(b.glow > 0.02){
+      const bx = Math.cos(b.a)*radius*b.rr, by = Math.sin(b.a)*radius*b.rr;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(255,178,110,${b.glow})`;
+      ctx.arc(bx,by,b.size + b.glow*1.5,0,Math.PI*2);
+      ctx.fill();
+      if(b.glow > 0.4){
+        ctx.strokeStyle = `rgba(255,178,110,${b.glow*0.3})`;
+        ctx.beginPath(); ctx.arc(bx,by, b.size+6, 0, Math.PI*2); ctx.stroke();
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+/* ---- Rotating wireframe globe (defense / satellite motif) ---- */
+let globePhase = 0;
+function drawGlobe(now){
+  const gx = W*0.115, gy = H*0.845;
+  const gr = Math.min(W,H)*0.085;
+
+  ctx.save();
+  ctx.translate(gx,gy);
+  globePhase += 0.004;
+
+  // outer disc
+  ctx.beginPath();
+  ctx.fillStyle = 'rgba(15,25,40,0.4)';
+  ctx.arc(0,0,gr,0,Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(79,211,255,0.35)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0,0,gr,0,Math.PI*2); ctx.stroke();
+
+  // latitude ellipses (horizontal bands)
+  ctx.strokeStyle = 'rgba(79,211,255,0.22)';
+  for(let i=-2;i<=2;i++){
+    const yy = (i/3)*gr;
+    const rx = Math.sqrt(Math.max(gr*gr - yy*yy,0));
+    ctx.beginPath();
+    ctx.ellipse(0, yy, rx, Math.abs(Math.sin(i*0.7))*2+1.2, 0, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  // rotating meridians (vertical, squished by phase to fake rotation)
+  ctx.strokeStyle = 'rgba(255,138,61,0.28)';
+  for(let i=0;i<4;i++){
+    const off = globePhase + i*(Math.PI/4);
+    const squish = Math.cos(off);
+    ctx.beginPath();
+    ctx.ellipse(0,0, Math.abs(squish)*gr, gr, 0, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // orbiting satellite
+  const orbR = gr*1.55;
+  const oa = globePhase*2.1;
+  const sx = Math.cos(oa)*orbR, sy = Math.sin(oa)*orbR*0.42;
+  ctx.strokeStyle = 'rgba(143,211,255,0.15)';
+  ctx.beginPath(); ctx.ellipse(0,0, orbR, orbR*0.42, 0, 0, Math.PI*2); ctx.stroke();
+  ctx.beginPath();
+  ctx.fillStyle = sy < 0 ? 'rgba(79,211,255,0.9)' : 'rgba(79,211,255,0.35)';
+  ctx.arc(sx,sy,2.4,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+let t0 = performance.now();
+function drawNet(now){
+  const dt = 1;
+  ctx.clearRect(0,0,W,H);
+
+  // subtle spectrum bars along bottom (very dim)
+  ctx.save();
+  ctx.globalAlpha = 0.045;
+  const bars = 64;
+  for(let i=0;i<bars;i++){
+    const bx = (W/bars)*i;
+    const h = 10 + Math.abs(Math.sin((now/700)+i*0.5))*40 + Math.sin(i*13.1)*6;
+    ctx.fillStyle = '#4fd3ff';
+    ctx.fillRect(bx, H-h, W/bars-2, h);
+  }
+  ctx.restore();
+
+  drawRadar(now);
+  drawGlobe(now);
+
+  // move nodes
+  for(const n of nodes){
+    n.x += n.vx*dt; n.y += n.vy*dt;
+    if(n.x<0||n.x>W) n.vx*=-1;
+    if(n.y<0||n.y>H) n.vy*=-1;
+    n.pulse += 0.02;
+  }
+
+  // edges
+  ctx.lineWidth = 1;
+  for(let i=0;i<nodes.length;i++){
+    for(let j=i+1;j<nodes.length;j++){
+      const a=nodes[i], b=nodes[j];
+      const dx=a.x-b.x, dy=a.y-b.y;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if(d < 150){
+        const op = (1 - d/150) * 0.08;
+        ctx.strokeStyle = `rgba(255,138,61,${op})`;
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      }
+    }
+  }
+  // nodes
+  for(const n of nodes){
+    const glow = n.active ? 0.85 : 0.3;
+    const size = n.r + Math.sin(n.pulse)*0.4;
+    ctx.beginPath();
+    ctx.fillStyle = n.active ? `rgba(255,138,61,${glow})` : `rgba(79,211,255,${glow*0.5})`;
+    ctx.arc(n.x,n.y,size,0,Math.PI*2);
+    ctx.fill();
+  }
+  requestAnimationFrame(drawNet);
+}
+requestAnimationFrame(drawNet);
+
+/* ============================= TELEMETRY TICKER ============================= */
+const scenarios = ['BEHAVIORAL PATTERN','FREQUENCY-AGILE','CORRELATED EMITTERS','ENVIRONMENT CHANGE'];
+setInterval(()=>{
+  document.getElementById('tr-freq').textContent = (280+Math.random()*90).toFixed(1);
+  document.getElementById('tr-conf').textContent = Math.floor(60+Math.random()*38);
+  if(Math.random() < 0.3){
+    document.getElementById('tl-scenario').textContent = scenarios[Math.floor(Math.random()*scenarios.length)];
+  }
+}, 1400);
+
+/* ============================= SCENE CONTENT ============================= */
+const scenesRoot = document.getElementById('scenes');
+
+const scenes = [];
+function addScene(html, duration){
+  const el = document.createElement('div');
+  el.className = 'scene';
+  el.innerHTML = html;
+  scenesRoot.appendChild(el);
+  scenes.push({el, duration});
+}
+
+/* ---- Scene 1 : Title ---- */
+addScene(`
+  <div class="center-text">
+    <div class="badge mx-auto" style="margin-bottom:26px;"><span class="sq"></span>SMART INDIA HACKATHON 2026 &nbsp;·&nbsp; SIH26055</div>
+    <h1 class="scene-title glitch-wrap" style="font-size:clamp(40px,6vw,68px); text-align:center;">
+      <span class="glitch" data-text="SMART-SCAN EW">SMART-SCAN EW</span>
+    </h1>
+    <p class="scene-sub mx-auto typewriter" style="text-align:center; font-size:17px; color:var(--ink-dim); border-right:2px solid var(--amber); display:inline-block;">
+      Adaptive Frequency Scan Strategy for Electronic Warfare
+    </p>
+    <div style="margin-top:34px; display:flex; gap:14px; justify-content:center;" class="fade-in" style="animation-delay:2.4s;">
+      <span class="pill">Simulation &amp; Research Prototype</span>
+      <span class="pill">No real RF hardware</span>
+    </div>
+  </div>
+`, 6500);
+
+/* ---- Scene 2 : The Problem ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">01</span> The Problem</div>
+  <h1 class="scene-title">Finding signals with zero prior intelligence</h1>
+  <p class="scene-sub">A receiver can only listen to a small slice of the spectrum at once — yet must locate emitters it knows nothing about, with no list and no map.</p>
+  <div class="grid" style="grid-template-columns:repeat(5,1fr);">
+    <div class="card"><h3>Static</h3><p>Stays on one frequency continuously.</p></div>
+    <div class="card"><h3>Periodic</h3><p>Transmits at regular intervals, then goes silent.</p></div>
+    <div class="card"><h3>Burst</h3><p>Appears for milliseconds, then vanishes.</p></div>
+    <div class="card"><h3>Frequency-agile</h3><p>Hops across bands unpredictably.</p></div>
+    <div class="card"><h3>Correlated</h3><p>Two or more signals that appear together.</p></div>
+  </div>
+  <p class="scene-sub" style="margin-top:22px; margin-bottom:0; font-style:italic; color:var(--ink-faint); border-left:2px solid var(--amber-dim); padding-left:14px;">
+    "Development of Smart Scan Strategy for Electronic Warfare in the absence of prior reliable intelligence of emitters and their operating characteristics." — SIH26055
+  </p>
+`, 8000);
+
+/* ---- Scene 3 : Why traditional scanning fails ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">02</span> Why Traditional Scanning Fails</div>
+  <h1 class="scene-title">Four approaches. None of them learn.</h1>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr); margin-bottom:22px;">
+    <div class="card"><span class="tag">SEQUENTIAL</span><h3>Scans every band in fixed order</h3><p>Wastes up to 93% of scans on empty bands when activity is sparse.</p></div>
+    <div class="card"><span class="tag">RANDOM</span><h3>Picks a band at random</h3><p>Unpredictable, but has no memory — performs no better over time.</p></div>
+    <div class="card"><span class="tag">PRIORITY</span><h3>Hand-crafted ranking rules</h3><p>Can't discover new signals on unexpected frequencies.</p></div>
+    <div class="card"><span class="tag">RULE-BASED</span><h3>Simple "scan again sooner" logic</h3><p>Can't learn complex patterns or relationships between bands.</p></div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1fr; align-items:center;">
+    <div><div class="stat-num" style="color:var(--red);" data-count="16">0</div><div class="stat-label">% of frequency-agile signals detected — sequential scanning</div></div>
+    <div><div class="stat-num" style="color:var(--green);" data-count="100">0</div><div class="stat-label">% detected by the adaptive scheduler — same scenario</div></div>
+  </div>
+`, 9000);
+
+/* ---- Scene 4 : Solution loop ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">03</span> Our Solution</div>
+  <h1 class="scene-title">A continuous learning loop</h1>
+  <p class="scene-sub">Every scan result feeds seven intelligence layers, which inform the next decision — and the cycle repeats, getting smarter each time.</p>
+  <div class="flow-row" style="margin-bottom:26px;">
+    <div class="flow-node">1&nbsp; Scan a band</div><div class="flow-arrow">&#8594;</div>
+    <div class="flow-node">2&nbsp; Record observation</div><div class="flow-arrow">&#8594;</div>
+    <div class="flow-node">3&nbsp; Update 7 intelligence layers</div><div class="flow-arrow">&#8594;</div>
+    <div class="flow-node">4&nbsp; Scheduler decides next scan</div><div class="flow-arrow">&#8594;</div>
+    <div class="flow-node">5&nbsp; Cycle repeats</div>
+  </div>
+  <div class="grid" style="grid-template-columns:1fr 1fr;">
+    <div class="card"><h3>Exploitation</h3><p>Scan bands already known to be active — capitalize on what's been learned.</p></div>
+    <div class="card"><h3>Exploration</h3><p>Check high-uncertainty bands so new or unexpected signals are never missed.</p></div>
+  </div>
+`, 8500);
+
+/* ---- Scene 5 : Intelligence layers ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">04</span> Intelligence Layers</div>
+  <h1 class="scene-title">Seven modules, one shared picture</h1>
+  <div class="grid" style="grid-template-columns:repeat(4,1fr);">
+    <div class="card"><h3>Activity Map</h3><p>Live per-band priority score that decays over time and jumps on detection.</p></div>
+    <div class="card"><h3>Temporal Memory</h3><p>Detects periodic signals via autocorrelation of inter-arrival times.</p></div>
+    <div class="card"><h3>Transition Graph</h3><p>Learns hop probabilities: Band 7 &#8594; Band 12 at 40% likelihood.</p></div>
+    <div class="card"><h3>Correlation Graph</h3><p>Finds bands that activate together — check one, alert on the other.</p></div>
+    <div class="card"><h3>Fingerprint Engine</h3><p>Clusters emitter behavior into static, periodic, agile, burst, or adaptive types.</p></div>
+    <div class="card"><h3>Prediction Layer</h3><p>Fuses every signal above into one forecast of near-future activity.</p></div>
+    <div class="card"><h3>Adaptive Scheduler</h3><p>LinUCB contextual bandit balances exploiting and exploring bands.</p></div>
+    <div class="card" style="border-color:rgba(255,138,61,0.35);"><h3 style="color:var(--amber);">+ Explainability</h3><p>Every decision ships with a human-readable reason.</p></div>
+  </div>
+`, 9000);
+
+/* ---- Scene 6 : Explainability ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">05</span> Explainability</div>
+  <h1 class="scene-title">Every decision has a reason</h1>
+  <p class="scene-sub">A Decision Trace panel shows the complete reasoning behind each scan — transparent, auditable, and trustworthy for defense review.</p>
+  <div class="card" style="padding:22px 24px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:18px; font-family:'JetBrains Mono',monospace; font-size:12.5px;">
+      <div><span style="color:var(--ink-faint);">BAND</span><br><b style="color:var(--ink); font-size:14px;">Band 12 · 312.4 MHz</b></div>
+      <div><span style="color:var(--ink-faint);">ACTIVITY SCORE</span><br><b style="color:var(--amber); font-size:14px;">0.87</b></div>
+      <div><span style="color:var(--ink-faint);">TRANSITION PROB</span><br><b style="color:var(--cyan); font-size:14px;">40%</b></div>
+      <div><span style="color:var(--ink-faint);">TEMPORAL PREDICTION</span><br><b style="color:var(--green); font-size:14px;">Likely active</b></div>
+      <div><span style="color:var(--ink-faint);">EXPLORATION BONUS</span><br><b style="color:var(--ink); font-size:14px;">Low</b></div>
+      <div><span style="color:var(--ink-faint);">FINAL SCORE</span><br><b style="color:var(--amber); font-size:14px;">0.94 (highest)</b></div>
+    </div>
+    <div style="margin-top:18px; padding-top:16px; border-top:1px solid var(--edge);">
+      <span class="tag" style="color:var(--amber); border-color:rgba(255,138,61,0.35); background:rgba(255,138,61,0.08);">REASON</span>
+      <p style="color:var(--ink-dim); font-size:13.5px; margin-top:6px;">Strong transition probability from Band 7, reinforced by recent periodic activity.</p>
+    </div>
+  </div>
+`, 8000);
+
+/* ---- Scene 7 : Architecture ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">06</span> System Architecture</div>
+  <h1 class="scene-title">From raw spectrum to a scan decision</h1>
+  <div class="grid" style="grid-template-columns:1fr; gap:10px; max-width:640px;">
+    ${['RF Environment Simulator','Virtual Receiver','Signal Detection','Observation Extraction','Temporal Memory Layer','Frequency Activity Map','Transition &amp; Correlation Graphs','Behavioral Fingerprint Engine','Prediction Layer','Intelligent Scan Scheduler','Next Scan Decision'].map((s,i)=>`
+      <div class="flow-row">
+        <div class="flow-node" style="flex:1; ${i===9?'border-color:var(--amber); color:var(--amber);':''}">${s}</div>${i<10?'<div class="flow-arrow">&#8595;</div>':''}
+      </div>
+    `).join('')}
+  </div>
+`, 8500);
+
+/* ---- Scene 8 : Evaluation results ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">07</span> Evaluation Results</div>
+  <h1 class="scene-title">Measured across seven reproducible scenarios</h1>
+  <p class="scene-sub">Four schedulers compared under identical, seeded conditions: Sequential, Random, Priority, and Adaptive.</p>
+  <div class="grid" style="grid-template-columns:repeat(3,1fr);">
+    <div class="card center-text">
+      <div class="tag">FREQUENCY-AGILE</div>
+      <div style="display:flex; justify-content:center; gap:18px; align-items:baseline;">
+        <div><div class="stat-num" style="font-size:30px; color:var(--red);" data-count="56">0</div><div class="stat-label">Sequential</div></div>
+        <div style="color:var(--ink-faint);">vs</div>
+        <div><div class="stat-num" style="font-size:30px; color:var(--green);" data-count="100">0</div><div class="stat-label">Adaptive</div></div>
+      </div>
+    </div>
+    <div class="card center-text">
+      <div class="tag">CORRELATED EMITTERS</div>
+      <div style="display:flex; justify-content:center; gap:18px; align-items:baseline;">
+        <div><div class="stat-num" style="font-size:30px; color:var(--red);" data-count="17">0</div><div class="stat-label">Sequential</div></div>
+        <div style="color:var(--ink-faint);">vs</div>
+        <div><div class="stat-num" style="font-size:30px; color:var(--green);" data-count="100">0</div><div class="stat-label">Adaptive</div></div>
+      </div>
+    </div>
+    <div class="card center-text">
+      <div class="tag">ENVIRONMENT CHANGE</div>
+      <div style="display:flex; justify-content:center; gap:18px; align-items:baseline;">
+        <div><div class="stat-num" style="font-size:30px; color:var(--red);" data-count="11">0</div><div class="stat-label">Sequential</div></div>
+        <div style="color:var(--ink-faint);">vs</div>
+        <div class="stat-label" style="font-size:13px; color:var(--green); max-width:110px; margin:0 auto;">Adaptive held detection steady</div>
+      </div>
+    </div>
+  </div>
+  <p class="scene-sub" style="margin-top:20px; margin-bottom:0;">Tracked metrics: Probability of Detection · False Alarm Rate · Intercept Rate · Avg Intercept Time · Prediction Accuracy · Scan Efficiency</p>
+`, 9500);
+
+/* ---- Scene 9 : What makes it unique ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">08</span> What Makes It Different</div>
+  <h1 class="scene-title">Seven reasons this isn't a simple scanner</h1>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr);">
+    <div class="card"><h3>01 &nbsp;Learns from zero intelligence</h3><p>Starts with no knowledge and builds understanding purely from its own observations.</p></div>
+    <div class="card"><h3>02 &nbsp;Frequency <em>and</em> time</h3><p>Temporal memory and periodicity detection enable predictive, not just spatial, scheduling.</p></div>
+    <div class="card"><h3>03 &nbsp;Learns transitions</h3><p>Tracks how emitters hop between bands and anticipates where they'll go next.</p></div>
+    <div class="card"><h3>04 &nbsp;Models relationships</h3><p>The correlation graph finds bands that activate together.</p></div>
+    <div class="card"><h3>05 &nbsp;Predicts, doesn't just react</h3><p>Combines every intelligence source into one forward-looking forecast.</p></div>
+    <div class="card"><h3>06 &nbsp;Explains every decision</h3><p>A full decision trace — never a black box.</p></div>
+  </div>
+`, 8500);
+
+/* ---- Scene 10 : Tech stack ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">09</span> Technology</div>
+  <h1 class="scene-title">Built for reproducibility and speed</h1>
+  <div class="grid" style="grid-template-columns:repeat(3,1fr);">
+    <div class="card"><span class="tag">CORE</span><h3>TypeScript</h3><p>Framework-agnostic intelligence modules — testable and swappable independently of the UI.</p></div>
+    <div class="card"><span class="tag">ALGORITHM</span><h3>LinUCB contextual bandit</h3><p>Sample-efficient, explainable, and deterministic — no GPU, no black box.</p></div>
+    <div class="card"><span class="tag">BUILD</span><h3>Vite</h3><p>Strict-mode type checking with instant hot reload during development.</p></div>
+    <div class="card"><span class="tag">UI</span><h3>React + Canvas</h3><p>Dashboard consumes core module output; Canvas renders spectrum, matrix and link graph.</p></div>
+    <div class="card"><span class="tag">TESTING</span><h3>Vitest</h3><p>Fast, TypeScript-native test suite for every module.</p></div>
+    <div class="card"><span class="tag">REPRODUCIBILITY</span><h3>Seeded randomness</h3><p>Every scenario and evaluation run is deterministic and repeatable.</p></div>
+  </div>
+`, 8000);
+
+/* ---- Scene 11 : Future vision ---- */
+addScene(`
+  <div class="eyebrow"><span class="num">10</span> Looking Ahead</div>
+  <h1 class="scene-title">A foundation designed to grow</h1>
+  <p class="scene-sub">A software research prototype today — honest about its limits, built to extend.</p>
+  <div class="grid" style="grid-template-columns:repeat(2,1fr);">
+    <div class="card"><h3>Multi-receiver coordination</h3><p>Multiple receivers sharing intelligence across a wider spectrum.</p></div>
+    <div class="card"><h3>Hardware-in-the-loop</h3><p>Connecting to real SDR hardware for research validation.</p></div>
+    <div class="card"><h3>Scenario editor</h3><p>Letting operators define custom emitter behaviors for training.</p></div>
+    <div class="card"><h3>Experiment comparison mode</h3><p>Side-by-side evaluation of strategies, at a glance.</p></div>
+  </div>
+`, 8000);
+
+/* ---- Scene 12 : Closing ---- */
+addScene(`
+  <div class="center-text">
+    <div class="badge mx-auto" style="margin-bottom:24px;"><span class="sq"></span>SIH26055 &nbsp;·&nbsp; ELECTRONIC WARFARE</div>
+    <h1 class="scene-title" style="font-size:clamp(34px,5vw,54px); text-align:center;">The receiver that learns fastest, wins.</h1>
+    <p class="scene-sub mx-auto" style="text-align:center; font-size:16px;">SMART-SCAN EW learns from every observation, predicts the future, and explains its reasoning — a foundation for next-generation adaptive electronic warfare systems.</p>
+    <div style="margin-top:30px; font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-faint); letter-spacing:0.08em;">THANK YOU — QUESTIONS WELCOME</div>
+  </div>
+`, 7000);
+
+/* ============================= PLAYBACK ENGINE ============================= */
+let current = 0;
+let playing = true;
+let segTimer = null;
+let segStart = 0;
+let segRemaining = scenes[0].duration;
+
+const progressWrap = document.getElementById('progress-wrap');
+const dotsWrap = document.getElementById('dots');
+const idxLabel = document.getElementById('scene-idx');
+
+scenes.forEach((s,i)=>{
+  const seg = document.createElement('div');
+  seg.className = 'progress-seg';
+  seg.innerHTML = '<div class="fill"></div>';
+  progressWrap.appendChild(seg);
+
+  const dot = document.createElement('div');
+  dot.className = 'dot-nav';
+  dot.addEventListener('click', ()=> goTo(i));
+  dotsWrap.appendChild(dot);
+});
+
+function renderIdx(){
+  idxLabel.textContent = String(current+1).padStart(2,'0') + ' / ' + String(scenes.length).padStart(2,'0');
+}
+
+function setActiveVisuals(){
+  scenes.forEach((s,i)=>{
+    s.el.classList.toggle('active', i===current);
+  });
+  [...progressWrap.children].forEach((seg,i)=>{
+    seg.classList.toggle('done', i<current);
+    const fill = seg.querySelector('.fill');
+    if(i<current) fill.style.width='100%';
+    else if(i>current) fill.style.width='0%';
+  });
+  [...dotsWrap.children].forEach((d,i)=> d.classList.toggle('active', i===current));
+  renderIdx();
+  animateCounts();
+}
+
+function animateCounts(){
+  const el = scenes[current].el;
+  const counters = el.querySelectorAll('[data-count]');
+  counters.forEach(c=>{
+    const target = parseInt(c.getAttribute('data-count'),10);
+    let startTs = null;
+    const dur = 1300;
+    function step(ts){
+      if(!startTs) startTs = ts;
+      const p = Math.min((ts-startTs)/dur, 1);
+      const eased = 1 - Math.pow(1-p, 3);
+      c.textContent = Math.round(eased*target);
+      if(p<1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+function currentFillEl(){
+  return progressWrap.children[current].querySelector('.fill');
+}
+
+function startSegment(){
+  clearInterval(segTimer);
+  segStart = performance.now();
+  const dur = scenes[current].duration;
+  segRemaining = dur;
+  const fillEl = currentFillEl();
+  fillEl.style.transition = 'none';
+  fillEl.style.width = '0%';
+  requestAnimationFrame(()=>{
+    fillEl.style.transition = `width ${dur}ms linear`;
+    fillEl.style.width = '100%';
+  });
+  segTimer = setTimeout(()=>{ if(playing) next(); }, dur);
+}
+
+function pauseSegment(){
+  clearInterval(segTimer);
+  clearTimeout(segTimer);
+  const elapsed = performance.now() - segStart;
+  segRemaining = Math.max(scenes[current].duration - elapsed, 0);
+  const fillEl = currentFillEl();
+  const computedWidth = getComputedStyle(fillEl).width;
+  fillEl.style.transition = 'none';
+  fillEl.style.width = computedWidth;
+}
+
+function resumeSegment(){
+  segStart = performance.now();
+  const fillEl = currentFillEl();
+  requestAnimationFrame(()=>{
+    fillEl.style.transition = `width ${segRemaining}ms linear`;
+    fillEl.style.width = '100%';
+  });
+  segTimer = setTimeout(()=>{ if(playing) next(); }, segRemaining);
+}
+
+function goTo(i){
+  current = ((i % scenes.length) + scenes.length) % scenes.length;
+  setActiveVisuals();
+  if(playing) startSegment(); else pauseSegmentVisualOnly();
+}
+function pauseSegmentVisualOnly(){
+  clearTimeout(segTimer);
+  const fillEl = currentFillEl();
+  fillEl.style.transition = 'none';
+  fillEl.style.width = '0%';
+  segRemaining = scenes[current].duration;
+}
+
+function next(){ goTo(current+1); }
+function prev(){ goTo(current-1); }
+
+document.getElementById('btn-next').addEventListener('click', ()=>{ next(); });
+document.getElementById('btn-prev').addEventListener('click', ()=>{ prev(); });
+document.getElementById('btn-play').addEventListener('click', togglePlay);
+
+function togglePlay(){
+  playing = !playing;
+  document.getElementById('btn-play').innerHTML = playing ? '&#10073;&#10073;' : '&#9654;';
+  if(playing) resumeSegment(); else pauseSegment();
+}
+
+window.addEventListener('keydown', (e)=>{
+  if(e.code === 'Space'){ e.preventDefault(); togglePlay(); }
+  else if(e.code === 'ArrowRight'){ next(); }
+  else if(e.code === 'ArrowLeft'){ prev(); }
+});
+
+/* init */
+setActiveVisuals();
+startSegment();
+</script>
+</body>
+</html>
